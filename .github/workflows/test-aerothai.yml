@@ -1,38 +1,36 @@
-name: Test Aerothai Connection
+name: Aerothai Auto-Pilot Bot
 
-# สั่งให้ทำงานเมื่อเรากดปุ่มรันด้วยตัวเอง
 on:
   workflow_dispatch: 
 
 jobs:
-  ping-test:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Requests Library
-        run: pip install requests
-
-      - name: Ping Aerothai Website
+      - name: Install Playwright
         run: |
-          python -c "
-          import requests
-          
-          # เปลี่ยน URL ตรงนี้เป็นลิงก์หน้าเว็บที่คุณเข้าไปโหลดไฟล์ PDF ประจำครับ
-          url = 'https://www.aerothai.aero/CASServices/Login.aspx?application=AIM&returnurl=https://notamthai.aerothai.aero/Login.aspx&originalReturnUrl=/NewiPIB.aspx' 
-          
-          headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
-          
-          try:
-              response = requests.get(url, headers=headers, timeout=10)
-              print(f'✅ เชื่อมต่อสำเร็จ! Status Code: {response.status_code}')
-              if response.status_code == 200:
-                  print('🎉 ข่าวดี: เซิร์ฟเวอร์ต่างประเทศสามารถเข้าถึงเว็บนี้ได้ เดินหน้าทำบอทต่อได้เลย!')
-              elif response.status_code in [403, 401]:
-                  print('❌ ข่าวร้าย: เว็บไซต์บล็อก IP ต่างประเทศ (Geoblocked)')
-          except Exception as e:
-              print(f'🚨 เชื่อมต่อล้มเหลว: {e}')
-          "
+          pip install playwright
+          playwright install chromium
+
+      - name: Run Scraping Bot
+        env:
+          AEROTHAI_USER: ${{ secrets.AEROTHAI_USER }}
+          AEROTHAI_PASS: ${{ secrets.AEROTHAI_PASS }}
+        run: python bot.py
+
+      - name: Upload Screenshots (ส่งรูปกลับมาให้ดู)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-screenshots
+          path: |
+            step1_login.png
+            step2_filled.png
+            step3_inside.png

@@ -26,8 +26,11 @@ jobs:
           AEROTHAI_PASS: ${{ secrets.AEROTHAI_PASS }}
         run: python bot.py
 
-      - name: Upload PDF to GitHub
+      - name: Upload Results (ภาพและ PDF)
+        if: always() # 🔥 สำคัญมาก: บังคับให้อัปโหลดเสมอแม้บอทจะ Error
         uses: actions/upload-artifact@v4
         with:
-          name: Generated_PIB_PDF
-          path: "*.pdf"
+          name: Bot_Results
+          path: |
+            *.pdf
+            *.png

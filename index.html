@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ลงทะเบียนระบบ</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: 'Sarabun', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f2f2f2; }
+    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 300px; width: 100%; }
+    #profile-pic { width: 80px; height: 80px; border-radius: 50%; display: none; margin: 0 auto 15px; border: 3px solid #00B900; }
+    h3 { margin: 10px 0; color: #333; font-size: 18px; }
+    p { color: #666; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #00B900; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 15px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    button { display: none; background: #00B900; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="loader" class="loader"></div>
+    <img id="profile-pic" src="" alt="Profile">
+    <h3 id="statusMsg">กำลังเชื่อมต่อ LINE...</h3>
+    <p id="subMsg">กรุณารอสักครู่</p>
+    <button id="closeBtn" onclick="liff.closeWindow()">ปิดหน้าต่าง</button>
+  </div>
+
+  <script>
+    // 1. ใส่ LIFF ID
+    const MY_LIFF_ID = "2009957658-t9uwm0l4"; 
+    
+    // 2. ใส่ Web App URL ของคุณ (ที่เพิ่งก๊อปปี้มาจากขั้นตอนที่ 1)
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz4-u9vND4fwV3_dZmCAKtObxDgca4wdKTB9xYougyTVvxXVJmFsfkI4R_VOHklIdFQuw/exec"; 
+
+    async function main() {
+      try {
+        await liff.init({ liffId: MY_LIFF_ID });
+        
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+
+        const profile = await liff.getProfile();
+        
+        if (profile.pictureUrl) {
+            document.getElementById('profile-pic').src = profile.pictureUrl;
+            document.getElementById('profile-pic').style.display = 'block';
+        }
+        
+        document.getElementById('statusMsg').innerText = `สวัสดีคุณ ${profile.displayName}`;
+        document.getElementById('subMsg').innerText = "กำลังบันทึกข้อมูลเข้าสู่ระบบ...";
+
+        // สร้าง URL สำหรับยิง API พร้อมแนบพารามิเตอร์ไปใน Query String
+        const targetUrl = `${GAS_API_URL}?mode=api_register&name=${encodeURIComponent(profile.displayName)}&userId=${encodeURIComponent(profile.userId)}`;
+
+        // ยิง Fetch API ไปที่ Google Apps Script
+        const response = await fetch(targetUrl);
+        const result = await response.json();
+
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('subMsg').style.display = 'none';
+
+        if(result.success) {
+            document.getElementById('statusMsg').innerHTML = `✅ ${result.message}`;
+            document.getElementById('statusMsg').style.color = 'green';
+        } else {
+            document.getElementById('statusMsg').innerHTML = `❌ ผิดพลาด: ${result.message}`;
+            document.getElementById('statusMsg').style.color = 'red';
+        }
+        document.getElementById('closeBtn').style.display = 'block';
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('statusMsg').innerText = "❌ เกิดข้อผิดพลาด";
+        document.getElementById('statusMsg').style.color = "red";
+        document.getElementById('subMsg').innerText = err.message;
+      }
+    }
+    main();
+  </script>
+</body>
+</html>

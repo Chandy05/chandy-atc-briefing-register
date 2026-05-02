@@ -7,7 +7,7 @@ PASS = os.getenv('AEROTHAI_PASS')
 
 def run(playwright):
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context(timezone_id="Asia/Bangkok")
+    context = browser.new_context(timezone_id="Asia/Bangkok", accept_downloads=True)
     page = context.new_page()
 
     try:
@@ -19,9 +19,20 @@ def run(playwright):
         page.locator('input[type="password"]').first.fill(PASS)
         page.locator('input[type="submit"], button[type="submit"], input[value="Login"]').first.click()
 
-        print("⏳ 3. รอระบบพาเข้าสู่หน้ากรอกข้อมูล (NewiPIB.aspx)...")
-        page.wait_for_url("**/NewiPIB.aspx", timeout=30000)
-        page.wait_for_selector("text='Callsign'", timeout=15000)
+        print("⏳ 3. รอเช็คผลการล็อกอิน...")
+        page.wait_for_timeout(4000)
+        page.screenshot(path="debug_01_after_login.png") # ถ่ายรูปไว้ดูว่าติดอะไรไหม
+
+        # ตรวจสอบเผื่อมีแจ้งเตือนให้ Force Login (กรณีมีคนล็อกอินค้างไว้)
+        if page.locator("text='Force Login'").count() > 0 or page.locator("text='force login'").count() > 0:
+            print("⚠️ พบการล็อกอินซ้อน กำลังกด Force Login ทะลุเข้าไป...")
+            page.locator("text='Force Login'").first.click()
+            page.wait_for_timeout(4000)
+
+        # รอจนกว่าคำว่า Callsign จะโผล่ขึ้นมาจริงๆ
+        print("⏳ กำลังรอหน้าฟอร์ม NewiPIB...")
+        page.wait_for_selector("text='Callsign'", timeout=20000)
+        page.screenshot(path="debug_02_inside_form.png")
 
         print("📝 4. กำลังกรอกแบบฟอร์มภารกิจ...")
         
@@ -29,7 +40,7 @@ def run(playwright):
         page.locator("td, span, label").filter(has_text="Area (BKK FIR only)").locator("input[type='radio']").first.check(force=True)
         page.wait_for_timeout(2000)
 
-        # 4.2 ติ๊กเลือก NOTAM Zone (เอา VTCX, VTSX ออก / เอา VTBX, VTPX, VTUX ไว้)
+        # 4.2 ติ๊กเลือก NOTAM Zone
         zones_to_check = ['VTBX', 'VTPX', 'VTUX']
         zones_to_uncheck = ['VTCX', 'VTSX']
 
@@ -54,13 +65,11 @@ def run(playwright):
         tomorrow = thai_time + datetime.timedelta(days=1)
         date_str = tomorrow.strftime("%d/%m/%Y")
         
-        print(f"📅 กำหนดวันที่เป็น: {date_str} และเวลา 00:00 - 23:59")
-        # Start Period
+        print(f"📅 กำหนดวันที่เป็น: {date_str} (00:00 - 23:59)")
         start_row = page.locator("tr").filter(has_text="Start Period")
         start_row.locator("input[type='text']").nth(0).fill(date_str)
         start_row.locator("input[type='text']").nth(1).fill("00:00")
 
-        # End Period
         end_row = page.locator("tr").filter(has_text="End Period")
         end_row.locator("input[type='text']").nth(0).fill(date_str)
         end_row.locator("input[type='text']").nth(1).fill("23:59")
@@ -68,23 +77,20 @@ def run(playwright):
         print("🚀 5. กดปุ่ม Create PIB...")
         page.locator("text='Create PIB'").click()
 
-        print("⏳ 6. รอประมวลผลข้อมูล (กำลังเข้าหน้า NewResultPIB.aspx)...")
-        page.wait_for_url("**/NewResultPIB.aspx", timeout=45000)
+        print("⏳ 6. รอประมวลผลข้อมูล (หน้า Result)...")
+        page.wait_for_selector("text='Generate PDF'", timeout=45000)
+        page.screenshot(path="debug_03_result_ready.png")
         page.wait_for_timeout(3000)
 
         print("📄 7. กำลังสั่ง Generate PDF...")
-        # 🔥 TRICK: บังคับให้บอทดึง PDF ในหน้าต่างเดิม ไม่ต้องเด้งแท็บใหม่
         page.evaluate("document.querySelectorAll('form').forEach(f => f.target = '_self');")
         page.evaluate("window.open = function(url, name, features) { window.location.href = url; return window; };")
 
-        # ดักจับข้อมูล Stream ที่ Server ส่งกลับมา
         with page.expect_response(lambda response: "NewResultPIB.aspx" in response.url, timeout=45000) as response_info:
             page.locator("text='Generate PDF'").click()
 
-        pdf_response = response_info.value
-        pdf_bytes = pdf_response.body()
+        pdf_bytes = response_info.value.body()
         
-        # เซฟไบต์เหล่านั้นประกอบร่างเป็นไฟล์ PDF
         file_name = f"Mission_PIB_{tomorrow.strftime('%Y-%m-%d')}.pdf"
         with open(file_name, "wb") as f:
             f.write(pdf_bytes)
@@ -93,8 +99,7 @@ def run(playwright):
 
     except Exception as e:
         print(f"🚨 เกิดข้อผิดพลาด: {str(e)}")
-        page.screenshot(path="error_screenshot.png", full_page=True)
-        print("📸 ถ่ายรูปจุดที่ Error ไว้ให้แล้ว (ดูในแท็บ Artifacts)")
+        page.screenshot(path="error_screenshot_final.png", full_page=True)
         raise e
     finally:
         browser.close()

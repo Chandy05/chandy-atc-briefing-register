@@ -26,11 +26,8 @@ jobs:
           AEROTHAI_PASS: ${{ secrets.AEROTHAI_PASS }}
         run: python bot.py
 
-      - name: Upload Screenshots (ส่งรูปกลับมาให้ดู)
+      - name: Upload PDF to GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: bot-screenshots
-          path: |
-            step1_login.png
-            step2_filled.png
-            step3_inside.png
+          name: Generated_PIB_PDF
+          path: "*.pdf"

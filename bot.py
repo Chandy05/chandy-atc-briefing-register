@@ -1,110 +1,33 @@
 import os
-import datetime
 from playwright.sync_api import sync_playwright
 
-# ดึงรหัสมา และใช้ .strip() เพื่อตัดช่องว่าง (Spacebar) ที่อาจเผลอก๊อปปี้ติดมาทิ้งไป
-USER = os.getenv('AEROTHAI_USER', '').strip()
-PASS = os.getenv('AEROTHAI_PASS', '').strip()
+USER = os.getenv('AEROTHAI_USER')
+PASS = os.getenv('AEROTHAI_PASS')
 
 def run(playwright):
+    # เปิดเบราว์เซอร์แบบดั้งเดิม ไม่มีเทคนิคพรางตัวใดๆ
     browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page()
     
-    # 🎭 ปลอมตัวเป็นเบราว์เซอร์ Chrome ของคนจริงๆ
-    context = browser.new_context(
-        timezone_id="Asia/Bangkok", 
-        accept_downloads=True,
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    )
-    page = context.new_page()
-
-    try:
-        print("🌍 1. กำลังเข้าหน้า Login...")
-        page.goto("https://www.aerothai.aero/CASServices/Login.aspx?application=AIM&returnurl=https://notamthai.aerothai.aero/Login.aspx&originalReturnUrl=/NewiPIB.aspx")
-        page.wait_for_timeout(3000)
-        
-        print("🔑 2. กำลังค่อยๆ พิมพ์ Username / Password (จำลองเป็นคน)...")
-        # ใช้ press_sequentially เพื่อจำลองการพิมพ์ทีละตัวอักษร หน่วงเวลา 100 มิลลิวินาที
-        page.locator('input[type="text"]').first.press_sequentially(USER, delay=100)
-        page.locator('input[type="password"]').first.press_sequentially(PASS, delay=100)
-        
-        page.wait_for_timeout(1000) # หยุดพักหายใจ 1 วินาทีก่อนกด Enter
-        page.locator('input[type="submit"], button[type="submit"], input[value="Login"]').first.click()
-
-        print("⏳ 3. รอเช็คผลการล็อกอิน...")
-        page.wait_for_timeout(4000)
-        page.screenshot(path="debug_01_after_login.png")
-
-        if page.locator("text='Force Login'").count() > 0 or page.locator("text='force login'").count() > 0:
-            print("⚠️ พบการล็อกอินซ้อน กำลังกด Force Login ทะลุเข้าไป...")
-            page.locator("text='Force Login'").first.click()
-            page.wait_for_timeout(4000)
-
-        print("⏳ กำลังรอหน้าฟอร์ม NewiPIB...")
-        page.wait_for_selector("text='Callsign'", timeout=20000)
-        page.screenshot(path="debug_02_inside_form.png")
-
-        print("📝 4. กำลังกรอกแบบฟอร์มภารกิจ...")
-        page.locator("td, span, label").filter(has_text="Area (BKK FIR only)").locator("input[type='radio']").first.check(force=True)
-        page.wait_for_timeout(2000)
-
-        zones_to_check = ['VTBX', 'VTPX', 'VTUX']
-        zones_to_uncheck = ['VTCX', 'VTSX']
-
-        for zone in zones_to_check:
-            cb = page.locator("td, span").filter(has_text=zone).locator("input[type='checkbox']")
-            if cb.count() > 0: cb.first.check(force=True)
-
-        for zone in zones_to_uncheck:
-            cb = page.locator("td, span").filter(has_text=zone).locator("input[type='checkbox']")
-            if cb.count() > 0: cb.first.uncheck(force=True)
-
-        page.locator("tr").filter(has_text="Callsign").locator("input[type='text']").first.fill("SCL")
-        page.locator("tr").filter(has_text="Departure Aerodrome").locator("input[type='text']").first.fill("VTBL")
-        page.locator("tr").filter(has_text="Destination Aerodrome").locator("input[type='text']").first.fill("VTPI")
-        page.locator("tr").filter(has_text="Alternate Aerodrome").locator("input[type='text']").first.fill("VTUN")
-
-        thai_time = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
-        tomorrow = thai_time + datetime.timedelta(days=1)
-        date_str = tomorrow.strftime("%d/%m/%Y")
-        
-        print(f"📅 กำหนดวันที่เป็น: {date_str} (00:00 - 23:59)")
-        start_row = page.locator("tr").filter(has_text="Start Period")
-        start_row.locator("input[type='text']").nth(0).fill(date_str)
-        start_row.locator("input[type='text']").nth(1).fill("00:00")
-
-        end_row = page.locator("tr").filter(has_text="End Period")
-        end_row.locator("input[type='text']").nth(0).fill(date_str)
-        end_row.locator("input[type='text']").nth(1).fill("23:59")
-
-        print("🚀 5. กดปุ่ม Create PIB...")
-        page.locator("text='Create PIB'").click()
-
-        print("⏳ 6. รอประมวลผลข้อมูล (หน้า Result)...")
-        page.wait_for_selector("text='Generate PDF'", timeout=45000)
-        page.screenshot(path="debug_03_result_ready.png")
-        page.wait_for_timeout(3000)
-
-        print("📄 7. กำลังสั่ง Generate PDF...")
-        page.evaluate("document.querySelectorAll('form').forEach(f => f.target = '_self');")
-        page.evaluate("window.open = function(url, name, features) { window.location.href = url; return window; };")
-
-        with page.expect_response(lambda response: "NewResultPIB.aspx" in response.url, timeout=45000) as response_info:
-            page.locator("text='Generate PDF'").click()
-
-        pdf_bytes = response_info.value.body()
-        
-        file_name = f"Mission_PIB_{tomorrow.strftime('%Y-%m-%d')}.pdf"
-        with open(file_name, "wb") as f:
-            f.write(pdf_bytes)
-
-        print(f"🎉 8. ดึงข้อมูลเสร็จสมบูรณ์! ได้ไฟล์ชื่อ: {file_name}")
-
-    except Exception as e:
-        print(f"🚨 เกิดข้อผิดพลาด: {str(e)}")
-        page.screenshot(path="error_screenshot_final.png", full_page=True)
-        raise e
-    finally:
-        browser.close()
+    print("🌍 1. กำลังเข้าหน้า Login...")
+    page.goto("https://www.aerothai.aero/CASServices/Login.aspx?application=AIM&returnurl=https://notamthai.aerothai.aero/Login.aspx&originalReturnUrl=/NewiPIB.aspx")
+    page.wait_for_timeout(3000)
+    
+    print("🔑 2. กำลังกรอก Username และ Password (แบบพิมพ์รวดเดียวจบ)...")
+    page.locator('input[type="text"]').first.fill(USER)
+    page.locator('input[type="password"]').first.fill(PASS)
+    
+    print("🚀 3. กำลังกดปุ่ม Login...")
+    page.locator('input[type="submit"], button[type="submit"], input[value="Login"]').first.click()
+    
+    print("⏳ 4. รอ 8 วินาที เพื่อดูผลลัพธ์ว่าทะลุไปได้ไหม...")
+    page.wait_for_timeout(8000)
+    
+    # ถ่ายรูปผลลัพธ์
+    page.screenshot(path="old_way_result.png", full_page=True)
+    print("📸 ถ่ายรูปเสร็จสิ้น! ตรวจสอบภาพ old_way_result.png ได้เลยครับ")
+    
+    browser.close()
 
 with sync_playwright() as playwright:
     run(playwright)

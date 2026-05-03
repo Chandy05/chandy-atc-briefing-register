@@ -26,11 +26,9 @@ jobs:
           AEROTHAI_PASS: ${{ secrets.AEROTHAI_PASS }}
         run: python bot.py
 
-      - name: Upload Results (ภาพและ PDF)
-        if: always() # 🔥 สำคัญมาก: บังคับให้อัปโหลดเสมอแม้บอทจะ Error
+      - name: Upload Result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Bot_Results
-          path: |
-            *.pdf
-            *.png
+          name: Old_Way_Screenshot
+          path: old_way_result.png
